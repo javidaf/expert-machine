@@ -27,22 +27,34 @@ for i in range(n_iterations):
     gradient = (2 / len(y)) * X.T @ error
     beta -= learning_rate * gradient
 
+beta_momentum = np.random.randn(X.shape[1], 1)
+velocity = np.zeros_like(beta_momentum)
+beta_momentum = np.random.randn(X.shape[1], 1)
+velocity = np.zeros_like(beta_momentum)
+gamma = 0.9  # Momentum coefficient
+cost_history_momentum = []
+
+# Gradient descent with Momentum
+for i in range(n_iterations):
+    y_pred = X @ beta_momentum
+    error = y_pred - y
+    cost = (1 / len(y)) * np.sum(error**2)
+    cost_history_momentum.append(cost)
+    gradient = (2 / len(y)) * X.T @ error
+    velocity = gamma * velocity + learning_rate * gradient
+    beta_momentum -= velocity
 
 plt.plot(range(n_iterations), cost_history, label="Plain GD")
+plt.plot(range(n_iterations), cost_history_momentum, label="GD with Momentum")
 plt.xlabel("Iteration")
 plt.ylabel("Cost")
 plt.title("Cost Function Convergence")
 plt.legend()
 plt.show()
 
+print("Final beta coefficients (GD with Momentum):")
+print(beta_momentum)
 
-plt.plot(range(n_iterations), cost_history)
-plt.xlabel("Iteration")
-plt.ylabel("Cost")
-plt.title("Cost Function Convergence")
-plt.show()
-
-# Output final parameters
 print("Final beta coefficients:")
 print(beta)
 # -----------------------------------------------------------------------------------
@@ -52,6 +64,7 @@ beta_newton = np.random.randn(X.shape[1], 1)
 n_iterations_newton = 10
 cost_history_newton = []
 
+# Precompute the Hessian matrix and its inverse
 H = (2 / len(y)) * X.T @ X
 H_inv = np.linalg.inv(H)
 
