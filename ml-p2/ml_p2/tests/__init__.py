@@ -1,3 +1,3 @@
 from .test_nn_regression import NNRegression
 from .test_nn_classification import test_classification
-
+from .test_logit import run_logistic_regression_comparison
