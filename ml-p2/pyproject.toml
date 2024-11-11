@@ -18,6 +18,8 @@ pandas = "^2.2.2"
 pillow = "^10.4.0"
 notebook = "^7.2.2"
 seaborn = "^0.13.2"
+autograd = "^1.7.0"
+ml-p1 = { git = "https://github.com/javidaf/cuddly-guacamole.git" }
 
 [build-system]
 requires = ["poetry-core"]
