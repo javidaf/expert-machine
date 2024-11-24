@@ -6,11 +6,8 @@ authors = ["Your Name <you@example.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
-numpy = "^2.1.0"
-scipy = "^1.14.1"
+python = ">=3.9"
 matplotlib = "^3.9.2"
-ipython = "^8.26.0"
 scikit-learn = "^1.5.1"
 mglearn = "^0.2.0"
 sympy = "^1.13.2"
@@ -20,7 +17,9 @@ notebook = "^7.2.2"
 seaborn = "^0.13.2"
 autograd = "^1.7.0"
 rasterio = "^1.4.2"
-
+scipy = "^1.11"
+numpy = "^1.26"
+ipython = "^8.15"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
