@@ -4,7 +4,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.metrics import mean_squared_error
-from ml_p2.utils.data_generation import generate_ff_data, FrankeFunction, load_classification_data
+from ml_p2.utils.data_generation import (
+    generate_ff_data,
+    FrankeFunction,
+    load_classification_data,
+)
 from ml_p2.visualization.plotting import plot_surface_3d, plot_eval_metric_vs_iter
 from ml_p2.visualization.classification_plots import plot_classification_results
 from ml_p2.neural_network import BaseNeuralNetwork
@@ -14,11 +18,20 @@ from ml_p2.neural_network.optimizer import SGD, Adam, RMSprop, AdaGrad
 
 
 class NeuralNetwork(BaseNeuralNetwork):
-    def __init__(self, input_size=2, hidden_layers=[32], output_size=1,
-                 hidden_activation='sigmoid', output_activation='linear',
-                 initializer='normal', optimizer='adam', learning_rate=0.01,
-                 use_regularization=False, lambda_=0.01
-                 ):
+    def __init__(
+        self,
+        input_size=2,
+        hidden_layers=[32],
+        output_size=1,
+        hidden_activation="sigmoid",
+        output_activation="linear",
+        initializer="normal",
+        optimizer="adam",
+        learning_rate=0.01,
+        use_regularization=False,
+        lambda_=0.01,
+        classification_type="binary",
+    ):
         """
         Initialize the neural network with given architecture.
 
@@ -36,6 +49,7 @@ class NeuralNetwork(BaseNeuralNetwork):
         self.layers = [input_size] + hidden_layers + [output_size]
         self.weights = []
         self.biases = []
+        self.classification_type = classification_type
 
         self.activations = []
         self.activation_derivatives = []
@@ -49,13 +63,13 @@ class NeuralNetwork(BaseNeuralNetwork):
             self.activations.append(act)
             self.activation_derivatives.append(act_derivative)
 
-            optimizer_map = {
-                'sgd': SGD,
-                'adam': Adam,
-                'rmsprop': RMSprop,
-                'adagrad': AdaGrad
+        optimizer_map = {
+            "sgd": SGD,
+            "adam": Adam,
+            "rmsprop": RMSprop,
+            "adagrad": AdaGrad,
         }
-            
+
         optimizer_class = optimizer_map.get(optimizer.lower(), Adam)
         self.optimizer = optimizer_class(learning_rate=learning_rate)
         self.initializer = getattr(Initializer, initializer)
@@ -64,18 +78,19 @@ class NeuralNetwork(BaseNeuralNetwork):
         self.lambda_ = lambda_
 
         self.params = {
-            'hidden_activation': hidden_activation,
-            'output_activation': output_activation,
-            'optimizer': optimizer,
-            'learning_rate': learning_rate,
-            'initializer': initializer,
-            'hidden_layers': hidden_layers,
-            'output_size': output_size,
-            'input_size': input_size,
-            'use_regularization': use_regularization,
-            'lambda_': lambda_,
+            "hidden_activation": hidden_activation,
+            "output_activation": output_activation,
+            "optimizer": optimizer,
+            "learning_rate": learning_rate,
+            "initializer": initializer,
+            "hidden_layers": hidden_layers,
+            "output_size": output_size,
+            "input_size": input_size,
+            "use_regularization": use_regularization,
+            "lambda_": lambda_,
+            "classification_type": classification_type,
         }
-        
+
         self._initialize_parameters()
 
     def _initialize_parameters(self):
@@ -126,10 +141,15 @@ class NeuralNetwork(BaseNeuralNetwork):
         # For sigmoid activation function, σ'(z⁽L⁾) = σ(z⁽L⁾) * (1 - σ(z⁽L⁾))
         # Need to use activation in the input of the derivative function for sigmoid
         # For other activation functions, use zs
-        if self.activation_derivatives[-1].__name__ == 'sigmoid_derivative':
-            delta = (activations[-1] - y) * self.activation_derivatives[-1](activations[-1])
+        if self.params["output_activation"] == "softmax":
+            delta = activations[-1] - y  # Derivative of softmax + cross-entropy
         else:
-            delta = (activations[-1] - y) * self.activation_derivatives[-1](zs[-1])
+            if self.activation_derivatives[-1].__name__ == "sigmoid_derivative":
+                delta = (activations[-1] - y) * self.activation_derivatives[-1](
+                    activations[-1]
+                )
+            else:
+                delta = (activations[-1] - y) * self.activation_derivatives[-1](zs[-1])
 
         # ∇W⁽L⁾ = (a⁽L-1⁾)ᵀ · δ⁽L⁾        shape: (n_{L-1} × nₗ)
         grad_w[-1] = np.dot(activations[-2].T, delta)
@@ -139,7 +159,6 @@ class NeuralNetwork(BaseNeuralNetwork):
 
         if self.use_regularization:
             grad_w[-1] += self.lambda_ * self.weights[-1]
-
 
         # backpropagate the error
         for l in range(2, len(self.layers)):
@@ -161,15 +180,13 @@ class NeuralNetwork(BaseNeuralNetwork):
         return grad_w, grad_b
 
     def compute_loss(self, y_pred, y):
-        """Compute MSE loss with optional L2 regularization"""
-        mse = np.mean((y_pred - y) ** 2)
-        
-        if self.use_regularization:
-            l2_reg = 0
-            for w in self.weights:
-                l2_reg += np.sum(w ** 2)
-            return mse + 0.5 * self.lambda_ * l2_reg
-        return mse
+        """Compute appropriate loss based on classification type"""
+        if self.classification_type == "binary":
+            return self.compute_binary_cross_entropy(y_pred, y)
+        elif self.classification_type == "multiclass":
+            return self.compute_categorical_cross_entropy(y_pred, y)
+        else:  # regression
+            return self.compute_mse(y_pred, y)
 
     def score(self, X, y):
         y_pred = self.predict(X)
@@ -215,61 +232,93 @@ class NeuralNetwork(BaseNeuralNetwork):
         return activations[-1]
 
     ######------------Classification-----
-    def compute_binary_cross_entropy(self, y_pred, y_true):
-        """Compute binary cross-entropy loss with optional L2 regularization"""
-        epsilon = 1e-15  # Small constant to avoid log(0)
-        y_pred = np.clip(y_pred, epsilon, 1 - epsilon)  # Clip predictions to avoid numerical instability
-        
-        loss = -np.mean(y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
-        
+    def compute_categorical_cross_entropy(self, y_pred, y_true):
+        """Compute categorical cross-entropy loss"""
+        epsilon = 1e-15
+        y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
+
+        # If labels are one-hot encoded
+        if len(y_true.shape) == 2:
+            loss = -np.sum(y_true * np.log(y_pred)) / y_true.shape[0]
+        else:
+            # If labels are integer encoded
+            n_samples = y_true.shape[0]
+            loss = -np.sum(np.log(y_pred[range(n_samples), y_true])) / n_samples
+
         if self.use_regularization:
             l2_reg = 0
             for w in self.weights:
-                l2_reg += np.sum(w ** 2)
+                l2_reg += np.sum(w**2)
+            return loss + 0.5 * self.lambda_ * l2_reg
+        return loss
+
+    def compute_binary_cross_entropy(self, y_pred, y_true):
+        """Compute binary cross-entropy loss with optional L2 regularization"""
+        epsilon = 1e-15  # Small constant to avoid log(0)
+        y_pred = np.clip(
+            y_pred, epsilon, 1 - epsilon
+        )  # Clip predictions to avoid numerical instability
+
+        loss = -np.mean(y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
+
+        if self.use_regularization:
+            l2_reg = 0
+            for w in self.weights:
+                l2_reg += np.sum(w**2)
             return loss + 0.5 * self.lambda_ * l2_reg
         return loss
 
     def predict_proba(self, X):
-        """Predict probability of class 1"""
+        """Predict class probabilities"""
         activations, _ = self.forward(X)
         return activations[-1]
 
-    def predict_classes(self, X, threshold=0.5):
+    def predict_classes(self, X):
         """Predict class labels"""
-        probas = self.predict_proba(X)
-        return (probas >= threshold).astype(int)
+        if self.classification_type == "binary":
+            probas = self.predict_proba(X)
+            return (probas > 0.5).astype(int)
+        else:
+            probas = self.predict_proba(X)
+            return np.argmax(probas, axis=1)
 
     def accuracy_score(self, X, y):
         """Compute accuracy score"""
         y_pred = self.predict_classes(X)
-        return np.mean(y_pred == y)
+        if len(y.shape) == 2:  # If one-hot encoded
+            y_true = np.argmax(y, axis=1)
+        else:
+            y_true = y
+        return np.mean(y_pred == y_true)
+
     def train_classifier(self, X, y, epochs, batch_size=32):
+        """Train the network for classification"""
         n_samples = X.shape[0]
         self.optimizer.initialize(self.weights, self.biases)
-        
+
         for epoch in range(epochs):
             indices = np.random.permutation(n_samples)
             X_shuffled = X[indices]
             y_shuffled = y[indices]
 
             for i in range(0, n_samples, batch_size):
-                X_batch = X_shuffled[i:i+batch_size]
-                y_batch = y_shuffled[i:i+batch_size]
+                X_batch = X_shuffled[i : i + batch_size]
+                y_batch = y_shuffled[i : i + batch_size]
 
                 activations, zs = self.forward(X_batch)
                 grad_w, grad_b = self.backward(activations, zs, y_batch)
-                
+
                 self.weights, self.biases = self.optimizer.update(
                     self.weights, self.biases, grad_w, grad_b
                 )
-            
-            # binary cross-entropy for classification
+
             predictions, _ = self.forward(X)
-            loss = self.compute_binary_cross_entropy(predictions[-1], y)
+            if self.classification_type == "binary":
+                loss = self.compute_binary_cross_entropy(predictions[-1], y)
+            else:
+                loss = self.compute_categorical_cross_entropy(predictions[-1], y)
             accuracy = self.accuracy_score(X, y)
             self.cost_history.append(loss)
 
             # if (epoch + 1) % 10 == 0 or epoch == 0:
             #     print(f"Epoch {epoch+1}/{epochs}, Loss: {loss:.4f}, Accuracy: {accuracy:.4f}")
-    
-    

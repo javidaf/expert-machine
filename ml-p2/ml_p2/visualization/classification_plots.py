@@ -178,3 +178,29 @@ def plot_accuracy_heatmap(accuracies, param1, param2,param1_label,param2_label,t
     plt.yticks(fontsize=11)
     plt.show()
 
+
+def plot_decision_boundary_multiclass(model, X, y, title="Multi-class Classification"):
+    h = 0.02
+    x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+    y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+
+    mesh_2d = np.c_[xx.ravel(), yy.ravel()]
+
+    feature_means = X[:, 2:].mean(axis=0)
+    mesh_points = np.column_stack(
+        [mesh_2d, np.tile(feature_means, (mesh_2d.shape[0], 1))]
+    )
+
+    Z = model.predict_classes(mesh_points)
+    Z = Z.reshape(xx.shape)
+
+    plt.figure(figsize=(8, 6))
+    plt.contourf(xx, yy, Z, alpha=0.4)
+    plt.scatter(X[:, 0], X[:, 1], c=y, alpha=0.8)
+    plt.xlabel("Feature 1")
+    plt.ylabel("Feature 2")
+    plt.title(title)
+    plt.colorbar(label="Class")
+    plt.tight_layout()
+    plt.show()
